@@ -96,6 +96,10 @@ export type BaseFetchOptions<B extends Record<string, any> = any> = {
 	 * Plugins
 	 */
 	plugins?: Plugin[];
+	/**
+	 * A zod schema used to validate JSON responses
+	 */
+	outputValidator?: z.ZodSchema;
 } & Omit<RequestInit, "body">;
 
 /**
@@ -242,9 +246,13 @@ export const betterFetch: BetterFetch = async (url, options) => {
 			const parser = options?.jsonParser ?? jsonParse;
 			const text = await response.text();
 			const json = await parser(text);
+
+			const validator = options?.outputValidator ?? z.any();
+			const data = validator.parse(json);
+
 			await options?.onSuccess?.(responseContext);
 			return {
-				data: json,
+				data,
 				error: null,
 			};
 		} else {
@@ -301,11 +309,15 @@ export const createFetch = <
 	E = unknown,
 >(
 	config?: CreateFetchOption,
+	routes?: Routes,
 ): BetterFetch<Routes, R, E> => {
 	const $fetch: BetterFetch = async (url, options) => {
+		// @ts-ignore
+		const outputValidator: z.ZodSchema = routes && routes[url]?.output;
 		return await betterFetch(url, {
 			...config,
 			...options,
+			outputValidator
 		});
 	};
 	$fetch.native = fetch;
